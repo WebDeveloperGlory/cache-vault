@@ -1,12 +1,20 @@
 import { ProductCategory, ProductEntity } from "@modules/product/domain/entities/product.entity";
 import { redisClient } from "@shared/config/redis";
 
+interface CachedAllProducts {
+    products: ProductEntity[];
+    total: number;
+}
+
 const client = redisClient.getClient();
 
 const KEYS = {
-    all: "products:all",
+    all: (page: number, limit: number, version: string) => `products:${version}:all:${page}:${limit}`,
     byId: (id: string) => `products:${id}`,
     byCat: (cat: ProductCategory) => `products:${cat}`,
+    byUser: (page: number, limit: number, user: string, version: string) => `products:${version}:user:${user}:${page}:${limit}`,
+    productVersion: 'product:cache_version',
+    userVersion: 'product:user:cache_version',
     popular: "popular:categories",
 }
 
@@ -17,10 +25,32 @@ const TTL = {
 }
 
 export const productCache = {
-    async getAll(): Promise<ProductEntity[] | null> {
-        const response = await client.get(KEYS.all);
-        if (response) return JSON.parse(response) as ProductEntity[];
+    async getAll(page: number, limit: number): Promise<CachedAllProducts | null> {
+        const version = await client.get(KEYS.productVersion) || '1';
+
+        const response = await client.get(KEYS.all(page, limit, version));
+        if (response) return JSON.parse(response) as CachedAllProducts;
         return null;
+    },
+
+    async setProductVersion(): Promise<number> {
+        return await client.incr(KEYS.productVersion);
+    },
+
+    async setUserVersion(): Promise<number> {
+        return await client.incr(KEYS.userVersion);
+    },
+
+    async setAll(page: number, limit: number, data: ProductEntity[], total: number): Promise<void> {
+        const expanded = { products: data, total };
+        const version = await client.get(KEYS.productVersion) || '1';
+        await client.json.set(KEYS.all(page, limit, version), "$", JSON.stringify(expanded));
+    },
+
+    async setByUser(page: number, limit: number, userId: string, data: ProductEntity, total: number): Promise<void> {
+        const expanded = { products: data, total };
+        const version = await client.get(KEYS.userVersion) || '1';
+        await client.json.set(KEYS.byUser(page, limit, userId, version), "$", JSON.stringify(expanded));
     },
 
     async setById(id: string, data: ProductEntity): Promise<void> {
@@ -64,10 +94,16 @@ export const productCache = {
         await client.del(KEYS.byId(id));
     },
 
-    async invalidateRelated(id: string, cat: ProductCategory): Promise<void> {
+    // async invalidateByUser(id: string): Promise<void> {
+    //     const version = await client.get(KEYS.productVersion) || '1';
+    //     await client.del(KEYS.byUser());
+    // },
+
+    async invalidateRelated(id: string, cat: ProductCategory, user: string): Promise<void> {
         await Promise.all([
             await client.del(KEYS.byId(id)),
             await client.del(KEYS.byCat(cat)),
+            // await client.del(KEYS.byUser(user)),
         ])
     }
 }

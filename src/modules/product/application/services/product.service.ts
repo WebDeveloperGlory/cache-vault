@@ -16,10 +16,14 @@ interface ProductCategoryResponse extends PaginatedResult<ProductEntity> {
     fromCache: boolean;
 }
 
+interface AllProductsResponse extends PaginatedResult<ProductEntity> {
+    fromCache: boolean;
+}
+
 export interface IProductService {
     create(userId: string, dto: CreateProductDto): Promise<ProductEntity>;
     findById(id: string): Promise<ProductEntity>;
-    findAll(page: number, limit: number): Promise<PaginatedResult<ProductEntity>>;
+    findAll(page: number, limit: number, user?: string): Promise<AllProductsResponse>;
     findByUser(userId: string, page: number, limit: number, category?: ProductCategory): Promise<PaginatedResult<ProductEntity>>;
     findByCategory(category: string, page: number, limit: number): Promise<PaginatedResult<ProductEntity>>;
     update(id: string, userId: string, dto: UpdateProductDto): Promise<ProductEntity>;
@@ -47,18 +51,21 @@ export class ProductService implements IProductService {
         const cached = await productCache.getById(id);
         if (cached) return { ...JSON.parse(cached), fromCache: true };
 
-        const product = await this.productRepository.findById(id);
+        const product = await this.productRepository.findByIdPop(id);
         if (!product) throw new ProductNotFoundError(id);
 
         await productCache.setById(id, product);
         return { ...product, fromCache: false };
     }
 
-    async findAll(page: number, limit: number): Promise<PaginatedResult<ProductEntity>> {
+    async findAll(page: number, limit: number, user?: string): Promise<AllProductsResponse> {
         const offset = (page - 1) * limit;
+        const filters: { user?: string } = {};
+        if (user) filters.user = user;
+
         const [items, total] = await Promise.all([
-            this.productRepository.findAll(limit, offset),
-            this.productRepository.count({})
+            this.productRepository.findAll(limit, offset, filters),
+            this.productRepository.count(filters)
         ]);
 
         return {
@@ -66,7 +73,8 @@ export class ProductService implements IProductService {
             total,
             page,
             limit,
-            totalPages: Math.ceil(total / limit)
+            totalPages: Math.ceil(total / limit),
+            fromCache: false
         }
     }
 
@@ -148,17 +156,17 @@ export class ProductService implements IProductService {
         }
     }
 
-    async update(id: string,  userId: string, dto: UpdateProductDto): Promise<ProductEntity> {
+    async update(id: string, userId: string, dto: UpdateProductDto): Promise<ProductEntity> {
         const user = await this.userRepo.findById(userId);
         if (!user) throw new UserNotFoundError(userId);
 
         const product = await this.productRepository.findById(id);
-        if(!product) throw new ProductNotFoundError(id);
+        if (!product) throw new ProductNotFoundError(id);
 
-        if(user.id !== product.user) throw new InvalidProductPermissionsError(userId);
+        if (user.id !== product.user) throw new InvalidProductPermissionsError(userId);
 
         const updated = await this.productRepository.update(id, dto);
-        await productCache.invalidateRelated(id, updated.category);
+        await productCache.invalidateRelated(id, updated.category, userId);
         return updated;
     }
 
@@ -166,7 +174,7 @@ export class ProductService implements IProductService {
         const product = await this.productRepository.findById(id);
         if (!product) throw new ProductNotFoundError(id);
 
-        await productCache.invalidateRelated(id, product.category);
+        await productCache.invalidateRelated(id, product.category, product.name);
         await this.productRepository.delete(id);
     }
 }

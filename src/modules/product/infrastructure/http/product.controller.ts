@@ -43,15 +43,16 @@ export class ProductController {
     };
 
     findAll = async (
-        req: Request<{}, {}, {}, { page?: string, limit?: string }>,
+        req: Request<{}, {}, {}, { page?: string, limit?: string, user?: string }>,
         res: Response,
         next: NextFunction
     ): Promise<void> => {
         try {
             const page = req.query.page ? parseInt(req.query.page) : 1;
             const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+            const { user } = req.query;
 
-            const result = await this.productService.findAll(page, limit);
+            const result = await this.productService.findAll(page, limit, user);
             res.status(200).json({
                 success: true,
                 message: 'Products retrieved',

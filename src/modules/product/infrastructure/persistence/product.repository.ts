@@ -10,6 +10,11 @@ export class ProductRepository implements IProductRepository {
     }
 
     async findById(id: string): Promise<ProductEntity | null> {
+        const product = await ProductModel.findById(id);
+        return product ? this.toEntity(product) : null;
+    }
+
+    async findByIdPop(id: string): Promise<ProductEntity | null> {
         const product = await ProductModel.findById(id).populate([
             {
                 path: 'user',
@@ -19,8 +24,8 @@ export class ProductRepository implements IProductRepository {
         return product ? this.toEntity(product) : null;
     }
 
-    async findAll(limit: number, offset: number): Promise<ProductEntity[]> {
-        const products = await ProductModel.find().skip(offset).limit(limit).populate([
+    async findAll(limit: number, offset: number, filter: Record<string, any>): Promise<ProductEntity[]> {
+        const products = await ProductModel.find(filter).skip(offset).limit(limit).populate([
             {
                 path: 'user',
                 select: 'name email'
@@ -30,7 +35,12 @@ export class ProductRepository implements IProductRepository {
     }
 
     async findByUser(userId: string, limit: number, offset: number, filters: Record<string, any>): Promise<ProductEntity[]> {
-        const products = await ProductModel.find({ user: userId, ...filters }).skip(offset).limit(limit);
+        const products = await ProductModel.find({ user: userId, ...filters }).skip(offset).limit(limit).populate([
+            {
+                path: 'user',
+                select: 'name email'
+            }
+        ]);
         return products.map(this.toEntity);
     }
 
