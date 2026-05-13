@@ -10,17 +10,37 @@ export class ProductRepository implements IProductRepository {
     }
 
     async findById(id: string): Promise<ProductEntity | null> {
-        const product = await ProductModel.findById(id);
+        const product = await ProductModel.findById(id).populate([
+            {
+                path: 'user',
+                select: 'name email'
+            }
+        ]);
         return product ? this.toEntity(product) : null;
     }
 
     async findAll(limit: number, offset: number): Promise<ProductEntity[]> {
-        const products = await ProductModel.find().skip(offset).limit(limit);
+        const products = await ProductModel.find().skip(offset).limit(limit).populate([
+            {
+                path: 'user',
+                select: 'name email'
+            }
+        ]);
+        return products.map(this.toEntity);
+    }
+
+    async findByUser(userId: string, limit: number, offset: number, filters: Record<string, any>): Promise<ProductEntity[]> {
+        const products = await ProductModel.find({ user: userId, ...filters }).skip(offset).limit(limit);
         return products.map(this.toEntity);
     }
 
     async findByCategory(cat: ProductCategory, limit: number, offset: number): Promise<ProductEntity[]> {
-        const products = await ProductModel.find({ category: cat }).skip(offset).limit(limit);
+        const products = await ProductModel.find({ category: cat }).skip(offset).limit(limit).populate([
+            {
+                path: 'user',
+                select: 'name email'
+            }
+        ]);
         return products.map(this.toEntity);
     }
     
@@ -41,6 +61,7 @@ export class ProductRepository implements IProductRepository {
     private toEntity(doc: ProductDocument): ProductEntity {
         return {
             id: doc._id.toString(),
+            user: doc.user.toString(),
             name: doc.name,
             description: doc.description,
             price: doc.price,

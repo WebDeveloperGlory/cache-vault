@@ -1,9 +1,10 @@
 import { CreateProductDto, UpdateProductDto } from '@modules/product/application/dtos/product.dto';
-import { ProductService } from '@modules/product/application/services/product.service';
+import { IProductService } from '@modules/product/application/services/product.service';
+import { ProductCategory } from '@modules/product/domain/entities/product.entity';
 import { Request, Response, NextFunction } from 'express';
 
 export class ProductController {
-    constructor(private readonly productService: ProductService) { }
+    constructor(private readonly productService: IProductService) { }
 
     create = async (
         req: Request<{}, {}, CreateProductDto>,
@@ -11,7 +12,7 @@ export class ProductController {
         next: NextFunction
     ): Promise<void> => {
         try {
-            const result = await this.productService.create(req.body);
+            const result = await this.productService.create(req.user!.id, req.body);
 
             res.status(201).json({
                 success: true,
@@ -61,6 +62,27 @@ export class ProductController {
         }
     };
 
+    findByUser = async (
+        req: Request<{}, {}, {}, { page?: string, limit?: string, category?: ProductCategory }>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> => {
+        try {
+            const page = req.query.page ? parseInt(req.query.page) : 1;
+            const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+            const { category } = req.query;
+
+            const result = await this.productService.findByUser(req.user!.id, page, limit, category);
+            res.status(200).json({
+                success: true,
+                message: 'Products retrieved',
+                ...result,
+            });
+        } catch (error) {
+            next(error);
+        }
+    };
+
     findByCategory = async (
         req: Request<{ id: string }, {}, {}, { page?: string, limit?: string }>,
         res: Response,
@@ -87,7 +109,7 @@ export class ProductController {
         next: NextFunction
     ): Promise<void> => {
         try {
-            const result = await this.productService.update(req.params.id, req.body);
+            const result = await this.productService.update(req.params.id, req.user!.id, req.body);
             res.status(200).json({
                 success: true,
                 message: 'Product updated',

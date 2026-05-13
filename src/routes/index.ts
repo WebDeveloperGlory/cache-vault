@@ -27,6 +27,7 @@ export function createRouter(): Router {
     );
     const productService = new ProductService(
         productRepo,
+        userRepo,
     );
 
     // Controllers //

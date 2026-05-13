@@ -2,7 +2,7 @@ import { CreateUserDto, UpdateUserDto } from "../dtos/user.dto";
 import { UserEntity, UserRole } from "@modules/user/domain/entities/user.entity";
 import { PaginatedResult } from "@shared/types/common.types";
 import { IUserRepository } from "@modules/user/domain/interfaces/user.repository.interface";
-import { UserAlreadyExistsError } from "@modules/user/domain/errors/user.errors";
+import { UserAlreadyExistsError, UserNotFoundError } from "@modules/user/domain/errors/user.errors";
 
 export interface IUserService {
     create(dto: CreateUserDto): Promise<UserEntity>;
@@ -47,7 +47,7 @@ export class UserService implements IUserService {
 
     async findById(id: string): Promise<UserEntity> {
         const user = await this.userRepo.findById(id);
-        if (!user) throw new UserAlreadyExistsError(id);
+        if (!user) throw new UserNotFoundError(id);
 
         return user;
     }

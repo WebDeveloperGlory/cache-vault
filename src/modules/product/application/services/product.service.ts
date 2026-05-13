@@ -2,8 +2,10 @@ import { ProductCategory, ProductEntity } from "@modules/product/domain/entities
 import { CreateProductDto, UpdateProductDto } from "../dtos/product.dto";
 import { PaginatedResult } from "@shared/types/common.types";
 import { IProductRepository } from "@modules/product/domain/interfaces/product.repository.interface";
-import { InvalidProductCategoryError, ProductNotFoundError } from "@modules/product/domain/errors/product.errors";
+import { InvalidProductCategoryError, InvalidProductPermissionsError, ProductNotFoundError } from "@modules/product/domain/errors/product.errors";
 import { productCache } from "@shared/cache/product.cache";
+import { IUserRepository } from "@modules/user/domain/interfaces/user.repository.interface";
+import { UserNotFoundError } from "@modules/user/domain/errors/user.errors";
 
 interface ProductResponse extends ProductEntity {
     fromCache: boolean;
@@ -15,20 +17,30 @@ interface ProductCategoryResponse extends PaginatedResult<ProductEntity> {
 }
 
 export interface IProductService {
-    create(dto: CreateProductDto): Promise<ProductEntity>;
+    create(userId: string, dto: CreateProductDto): Promise<ProductEntity>;
     findById(id: string): Promise<ProductEntity>;
     findAll(page: number, limit: number): Promise<PaginatedResult<ProductEntity>>;
+    findByUser(userId: string, page: number, limit: number, category?: ProductCategory): Promise<PaginatedResult<ProductEntity>>;
     findByCategory(category: string, page: number, limit: number): Promise<PaginatedResult<ProductEntity>>;
-    update(id: string, dto: UpdateProductDto): Promise<ProductEntity>;
+    update(id: string, userId: string, dto: UpdateProductDto): Promise<ProductEntity>;
     delete(id: string): Promise<void>;
 }
 
 export class ProductService implements IProductService {
-    constructor(private readonly productRepository: IProductRepository) { }
+    constructor(
+        private readonly productRepository: IProductRepository,
+        private readonly userRepo: IUserRepository,
+    ) { }
 
-    async create(dto: CreateProductDto): Promise<ProductEntity> {
-        await productCache.invalidateByCategory(dto.category)
-        return this.productRepository.create(dto);
+    async create(userId: string, dto: CreateProductDto): Promise<ProductEntity> {
+        const user = await this.userRepo.findById(userId);
+        if (!user) throw new UserNotFoundError(userId);
+
+        await productCache.invalidateByCategory(dto.category);
+        return this.productRepository.create({
+            ...dto,
+            user: userId
+        });
     }
 
     async findById(id: string): Promise<ProductResponse> {
@@ -47,6 +59,28 @@ export class ProductService implements IProductService {
         const [items, total] = await Promise.all([
             this.productRepository.findAll(limit, offset),
             this.productRepository.count({})
+        ]);
+
+        return {
+            data: items,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit)
+        }
+    }
+
+    async findByUser(userId: string, page: number, limit: number, category?: ProductCategory): Promise<PaginatedResult<ProductEntity>> {
+        const user = await this.userRepo.findById(userId);
+        if (!user) throw new UserNotFoundError(userId);
+
+        const offset = (page - 1) * limit;
+        const filters: { category?: ProductCategory } = {};
+        if (category) filters.category = category;
+
+        const [items, total] = await Promise.all([
+            this.productRepository.findByUser(userId, limit, offset, filters),
+            this.productRepository.count(filters)
         ]);
 
         return {
@@ -87,6 +121,8 @@ export class ProductService implements IProductService {
                         fromCache: true
                     }
                 }
+            } else {
+                await productCache.invalidateByCategory(category as ProductCategory);
             }
         }
 
@@ -112,7 +148,15 @@ export class ProductService implements IProductService {
         }
     }
 
-    async update(id: string, dto: UpdateProductDto): Promise<ProductEntity> {
+    async update(id: string,  userId: string, dto: UpdateProductDto): Promise<ProductEntity> {
+        const user = await this.userRepo.findById(userId);
+        if (!user) throw new UserNotFoundError(userId);
+
+        const product = await this.productRepository.findById(id);
+        if(!product) throw new ProductNotFoundError(id);
+
+        if(user.id !== product.user) throw new InvalidProductPermissionsError(userId);
+
         const updated = await this.productRepository.update(id, dto);
         await productCache.invalidateRelated(id, updated.category);
         return updated;

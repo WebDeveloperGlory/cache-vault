@@ -1,9 +1,12 @@
 import { ProductCategory, ProductEntity } from "@modules/product/domain/entities/product.entity";
-import { Document, model, Schema } from "mongoose";
+import { Document, model, Schema, Types } from "mongoose";
 
-export interface ProductDocument extends Omit<ProductEntity, 'id'>, Document { };
+export interface ProductDocument extends Omit<ProductEntity, 'id' | 'user'>, Document {
+    user: Types.ObjectId;
+};
 
 const ProductSchema = new Schema<ProductDocument>({
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
     price: { type: Number, required: true },
