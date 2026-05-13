@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+logs/
+uploads/
+
+.env
+!.env.example
+
+# Testing
+coverage/
+test.js
+
+*.js.map
+*.d.ts.map
+
+# mongodb-memory-server binary cache (per-project)
+# If you set MONGOMS_DOWNLOAD_DIR to a global path, this won't be created per-project
+.cache/
