@@ -15,13 +15,15 @@ export class ProductRepository implements IProductRepository {
     }
 
     async findByIdPop(id: string): Promise<ProductEntity | null> {
-        const product = await ProductModel.findById(id).populate([
-            {
-                path: 'user',
-                select: 'name email'
-            }
-        ]);
-        return product ? this.toEntity(product) : null;
+        const product = await ProductModel
+            .findById(id)
+            .populate([
+                {
+                    path: 'user',
+                    select: 'name email'
+                }
+            ]).lean();
+        return product ? this.toExpandedEntity(product) : null;
     }
 
     async findAll(limit: number, offset: number, filter: Record<string, any>): Promise<ProductEntity[]> {
@@ -53,10 +55,10 @@ export class ProductRepository implements IProductRepository {
         ]);
         return products.map(this.toEntity);
     }
-    
+
     async update(id: string, data: Partial<CreateProductData>): Promise<ProductEntity> {
         const product = await ProductModel.findByIdAndUpdate(id, data, { new: true });
-        if(!product) throw new ProductNotFoundError(id);
+        if (!product) throw new ProductNotFoundError(id);
         return this.toEntity(product);
     }
 
@@ -68,10 +70,32 @@ export class ProductRepository implements IProductRepository {
         return await ProductModel.countDocuments(filter);
     }
 
-    private toEntity(doc: ProductDocument): ProductEntity {
+    private toEntity(doc: any): ProductEntity {
         return {
             id: doc._id.toString(),
             user: doc.user.toString(),
+            name: doc.name,
+            description: doc.description,
+            price: doc.price,
+            category: doc.category,
+            stock: doc.stock,
+            createdAt: doc.createdAt,
+            updatedAt: doc.updatedAt,
+        }
+    }
+
+    private toExpandedEntity(doc: any): ProductEntity {
+        return {
+            id: doc._id.toString(),
+            user:
+                typeof doc.user === 'object'
+                    ? {
+                        _id: doc.user._id.toString(),
+                        name: doc.user.name,
+                        email: doc.user.email
+                    }
+                    : doc.user.toString(),
+
             name: doc.name,
             description: doc.description,
             price: doc.price,

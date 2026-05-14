@@ -23,7 +23,7 @@ interface AllProductsResponse extends PaginatedResult<ProductEntity> {
 export interface IProductService {
     create(userId: string, dto: CreateProductDto): Promise<ProductEntity>;
     findById(id: string): Promise<ProductEntity>;
-    findAll(page: number, limit: number, user?: string): Promise<AllProductsResponse>;
+    findAll(page: number, limit: number, user?: string, category?: ProductCategory): Promise<AllProductsResponse>;
     findByUser(userId: string, page: number, limit: number, category?: ProductCategory): Promise<PaginatedResult<ProductEntity>>;
     findByCategory(category: string, page: number, limit: number): Promise<PaginatedResult<ProductEntity>>;
     update(id: string, userId: string, dto: UpdateProductDto): Promise<ProductEntity>;
@@ -58,10 +58,11 @@ export class ProductService implements IProductService {
         return { ...product, fromCache: false };
     }
 
-    async findAll(page: number, limit: number, user?: string): Promise<AllProductsResponse> {
+    async findAll(page: number, limit: number, user?: string, category?: ProductCategory): Promise<AllProductsResponse> {
         const offset = (page - 1) * limit;
-        const filters: { user?: string } = {};
+        const filters: { user?: string, category?: ProductCategory } = {};
         if (user) filters.user = user;
+        if (category) filters.category = category;
 
         const [items, total] = await Promise.all([
             this.productRepository.findAll(limit, offset, filters),
@@ -163,6 +164,7 @@ export class ProductService implements IProductService {
         const product = await this.productRepository.findById(id);
         if (!product) throw new ProductNotFoundError(id);
 
+        console.log({product})
         if (user.id !== product.user) throw new InvalidProductPermissionsError(userId);
 
         const updated = await this.productRepository.update(id, dto);

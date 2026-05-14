@@ -10,7 +10,9 @@ const KEYS = {
 
 export const userCache = {
     async setLoginAttempt(ip: string): Promise<number> {
+        // const key = await client.set
         const attempts = await client.incr(KEYS.login(ip));
+        console.log(attempts)
         if (attempts === 1) {
             await client.expire(KEYS.login(ip), 60);
         }
@@ -18,7 +20,10 @@ export const userCache = {
     },
 
     async setProfile(id: string, data: UserEntity): Promise<void> {
-        await client.json.set(KEYS.profile(id), "$", JSON.stringify(data));
+        await client.set(
+            KEYS.profile(id),
+            JSON.stringify(data)
+        );
     },
 
     async getProfile(id: string): Promise<UserEntity | null> {

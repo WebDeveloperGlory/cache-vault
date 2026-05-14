@@ -6,6 +6,7 @@ import morgan from 'morgan';
 import { config } from '@shared/config/env.config';
 import { errorHandler } from '@shared/middlewares/error-handler.middleware';
 import { apiLimiter } from '@shared/middlewares/rate-limiter.middleware';
+import cookieParser from 'cookie-parser';
 
 export const createAppAndServer = (router: Router): { app: Application; server: http.Server } => {
     const app = express();
@@ -16,6 +17,7 @@ export const createAppAndServer = (router: Router): { app: Application; server: 
     app.use('/api', apiLimiter);
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
+    app.use(cookieParser());
     app.use('/uploads', express.static('uploads'));
 
     if (config.env !== 'test') {

@@ -59,11 +59,7 @@ export class AuthService implements IAuthService {
         const existing = await this.userRepo.findByEmail(dto.email);
         if (existing) throw new UserAlreadyExistsError(dto.email);
 
-        const passwordHash = await hashPassword(dto.password);
-        const user = await this.userRepo.create({
-            ...dto,
-            password: passwordHash,
-        });
+        const user = await this.userRepo.create(dto);
         const tokens = await this.issueTokenPair(user, meta);
 
         return {
@@ -73,6 +69,7 @@ export class AuthService implements IAuthService {
     }
 
     async login(dto: LoginDto, meta?: { ip?: string; ua?: string }): Promise<AuthResponse> {
+        console.log(meta?.ip)
         const cache = await userCache.setLoginAttempt(meta?.ip ?? 'unknown');
         if(cache && cache > 5) throw new LoginRateLimitError();
 
@@ -81,6 +78,7 @@ export class AuthService implements IAuthService {
         if (!user.isActive) throw new AccountInactiveError();
 
         const passwordValid = await comparePassword(dto.password, user.passwordHash);
+        console.log({ incoming: dto.password, daved: user.passwordHash, passwordValid });
         if (!passwordValid) throw new InvalidCredentialsError('email');
 
         const tokens = await this.issueTokenPair(user, meta);
