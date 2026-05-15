@@ -6,15 +6,15 @@ A Node.js/TypeScript REST API demonstrating Redis caching patterns (cache-aside,
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js + TypeScript |
-| Framework | Express |
-| Database | MongoDB + Mongoose |
-| Cache | Redis (`node-redis` v4) |
-| Auth | JWT (access token) + HTTP-only cookie (refresh token) |
-| Validation | Zod |
-| Password hashing | bcrypt |
+| Layer            | Technology                                            |
+| ---------------- | ----------------------------------------------------- |
+| Runtime          | Node.js + TypeScript                                  |
+| Framework        | Express                                               |
+| Database         | MongoDB + Mongoose                                    |
+| Cache            | Redis (`node-redis` v4)                               |
+| Auth             | JWT (access token) + HTTP-only cookie (refresh token) |
+| Validation       | Zod                                                   |
+| Password hashing | bcrypt                                                |
 
 ---
 
@@ -22,36 +22,73 @@ A Node.js/TypeScript REST API demonstrating Redis caching patterns (cache-aside,
 
 ```
 src/
-├── config/
-│   ├── env.config.ts         # Typed env vars
-│   ├── mongoose.config.ts    # MongoDB singleton
-│   └── redis.config.ts       # Redis singleton (RedisClient class)
 ├── modules/
 │   ├── auth/
-│   │   ├── auth.controller.ts
-│   │   ├── auth.service.ts
-│   │   ├── auth.routes.ts
-│   │   └── schemas/          # Zod schemas
+│   │   ├── application/
+│   │   │   ├── dtos/
+│   │   │   └── services/
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   ├── errors/
+│   │   │   └── interfaces/
+│   │   ├── infrastructure/
+│   │   │   ├── http/
+│   │   │   └── persistence/
 │   ├── products/
-│   │   ├── product.controller.ts
-│   │   ├── product.service.ts
-│   │   ├── product.routes.ts
-│   │   ├── product.repo.ts
-│   │   ├── product.cache.ts  # All cache logic (keys, TTLs, invalidation)
-│   │   └── product.model.ts
+│   │   ├── application/
+│   │   │   ├── dtos/
+│   │   │   └── services/
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   ├── errors/
+│   │   │   └── interfaces/
+│   │   ├── infrastructure/
+│   │   │   ├── http/
+│   │   │   └── persistence/
 │   └── users/
-│       ├── user.controller.ts
-│       ├── user.service.ts
-│       ├── user.routes.ts
-│       └── user.model.ts
+│       ├── application/
+│       │   ├── dtos/
+│       │   │   └── user.dto.ts
+│       │   └── services/
+│       │   │   └── user.service.ts
+│       ├── domain/
+│       │   ├── entities/
+│       │   │   └── user.entity.ts
+│       │   ├── errors/
+│       │   │   └── user.errors.ts
+│       │   └── interfaces/
+│       │       └── user.repository.interface.ts
+│       └── infrastructure/
+│           ├── http/
+│           │   ├── user.controller.ts
+│           │   └── user.routes.ts
+│           └── persistence/
+│               ├── refresh-token.model.ts
+│               ├── user.interface.ts
+│               └── user.model.ts
+├── routes/
+│   └── index.ts
 ├── shared/
+│   ├── cache/
+│   │   ├── product.cache.ts
+│   │   └── user.cache.ts
+│   ├── config/
+│   │   ├── env.config.ts         # Typed env vars
+│   │   ├── mongoose.config.ts    # MongoDB singleton
+│   │   └── redis.config.ts       # Redis singleton (RedisClient class)
 │   ├── errors/
 │   │   └── app.error.ts      # AppError hierarchy
 │   ├── middlewares/
 │   │   ├── auth.middleware.ts
-│   │   └── error-handler.middleware.ts
+│   │   ├── error-handler.middleware.ts
+│   │   ├── rate-limiter.middleware.ts
+│   │   └── validation.middleware.ts
+│   ├── types/
+│   │   ├── common.types.ts
+│   │   └── express.d.ts
 │   └── utils/
 │       └── logger.util.ts
+├── server.ts
 └── app.ts
 ```
 
@@ -86,33 +123,33 @@ CORS_ORIGIN=http://localhost:3000
 
 ### Auth  `BASE: /api/v1/auth`
 
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| `POST` | `/register` | — | Register new user, returns access token + sets refresh cookie |
-| `POST` | `/login` | — | Login, returns access token + sets refresh cookie |
-| `POST` | `/logout` | ✓ | Revoke refresh token(s). Body: `{ allDevices: boolean }` |
-| `POST` | `/token/refresh` | cookie | Silent refresh — reads `refreshToken` cookie, returns new access token |
-| `GET` | `/me` | ✓ | Get current user profile (cached, returns `fromCache` flag) |
-| `POST` | `/password/change` | ✓ | Change password. Body: `{ oldPassword, newPassword }` |
+| Method | Route              | Auth   | Description                                                            |
+| ------ | ------------------ | ------ | ---------------------------------------------------------------------- |
+| `POST` | `/register`        | —      | Register new user, returns access token + sets refresh cookie          |
+| `POST` | `/login`           | —      | Login, returns access token + sets refresh cookie                      |
+| `POST` | `/logout`          | ✓      | Revoke refresh token(s). Body: `{ allDevices: boolean }`               |
+| `POST` | `/token/refresh`   | cookie | Silent refresh — reads `refreshToken` cookie, returns new access token |
+| `GET`  | `/me`              | ✓      | Get current user profile (cached, returns `fromCache` flag)            |
+| `POST` | `/password/change` | ✓      | Change password. Body: `{ oldPassword, newPassword }`                  |
 
 ### Products  `BASE: /api/v1/product`
 
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| `GET` | `/` | — | List all products (paginated). Query: `page`, `limit`, `user`, `category` |
-| `POST` | `/` | ✓ | Create product |
-| `GET` | `/personal` | ✓ | My own product listings. Query: `page`, `limit`, `category` |
-| `GET` | `/category/:id` | — | Products by category (cached). Returns `categoryViews` + `fromCache` |
-| `GET` | `/:id` | — | Single product (cached). Returns `fromCache` flag |
-| `PUT` | `/:id` | ✓ | Update product. Invalidates item + list + category caches |
-| `DELETE` | `/:id` | ✓ | Delete product (204). Invalidates related caches |
+| Method   | Route           | Auth | Description                                                               |
+| -------- | --------------- | ---- | ------------------------------------------------------------------------- |
+| `GET`    | `/`             | —    | List all products (paginated). Query: `page`, `limit`, `user`, `category` |
+| `POST`   | `/`             | ✓    | Create product                                                            |
+| `GET`    | `/personal`     | ✓    | My own product listings. Query: `page`, `limit`, `category`               |
+| `GET`    | `/category/:id` | —    | Products by category (cached). Returns `categoryViews` + `fromCache`      |
+| `GET`    | `/:id`          | —    | Single product (cached). Returns `fromCache` flag                         |
+| `PUT`    | `/:id`          | ✓    | Update product. Invalidates item + list + category caches                 |
+| `DELETE` | `/:id`          | ✓    | Delete product (204). Invalidates related caches                          |
 
 ### Users  `BASE: /api/v1/user`
 
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| `GET` | `/` | ✓ | List all users (paginated). Query: `page`, `limit`, `role`, `isActive` |
-| `GET` | `/:id` | ✓ | Get user by ID |
+| Method | Route  | Auth | Description                                                            |
+| ------ | ------ | ---- | ---------------------------------------------------------------------- |
+| `GET`  | `/`    | ✓    | List all users (paginated). Query: `page`, `limit`, `role`, `isActive` |
+| `GET`  | `/:id` | ✓    | Get user by ID                                                         |
 
 ---
 
@@ -227,15 +264,15 @@ npm start
 
 ## Error Codes Reference
 
-| Code | HTTP | Description |
-|---|---|---|
-| `NOT_FOUND` | 404 | Resource not found |
-| `VALIDATION_ERROR` | 400 | Zod or Mongoose validation failure |
-| `UNAUTHORIZED` | 401 | Missing or invalid token |
-| `FORBIDDEN` | 403 | Insufficient permissions |
-| `CONFLICT` | 409 | Duplicate resource (e.g. email already registered) |
-| `INVALID_VERIFICATION_TOKEN` | 400 | Bad token |
-| `VERIFICATION_TOKEN_EXPIRED` | 410 | Token has expired |
+| Code                         | HTTP | Description                                        |
+| ---------------------------- | ---- | -------------------------------------------------- |
+| `NOT_FOUND`                  | 404  | Resource not found                                 |
+| `VALIDATION_ERROR`           | 400  | Zod or Mongoose validation failure                 |
+| `UNAUTHORIZED`               | 401  | Missing or invalid token                           |
+| `FORBIDDEN`                  | 403  | Insufficient permissions                           |
+| `CONFLICT`                   | 409  | Duplicate resource (e.g. email already registered) |
+| `INVALID_VERIFICATION_TOKEN` | 400  | Bad token                                          |
+| `VERIFICATION_TOKEN_EXPIRED` | 410  | Token has expired                                  |
 
 ---
 
