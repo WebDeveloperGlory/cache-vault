@@ -239,4 +239,4 @@ npm start
 
 ---
 
-*Backend for [CacheVault](../cache-vault) frontend. Expand this file when new modules or routes are added.*
+*Backend for [CacheVault](../cache-vault) frontend.*
